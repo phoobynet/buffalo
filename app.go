@@ -14,22 +14,6 @@ import (
 	"time"
 )
 
-type Trade struct {
-	Symbol    string  `json:"S"`
-	Price     float64 `json:"p"`
-	Size      float64 `json:"s"`
-	Timestamp int64   `json:"t"`
-}
-
-type Quote struct {
-	Symbol    string  `json:"S"`
-	BidPrice  float64 `json:"bp"`
-	BidSize   float64 `json:"bs"`
-	AskPrice  float64 `json:"ap"`
-	AskSize   float64 `json:"as"`
-	Timestamp int64   `json:"t"`
-}
-
 // App struct
 type App struct {
 	mut                sync.Mutex
@@ -41,10 +25,12 @@ type App struct {
 	marketDataClient   *marketdata.Client
 	stocksStreamClient *stream.StocksClient
 	ready              bool
-	trade              Trade
 	tradeChannel       chan stream.Trade
 	quoteChannel       chan stream.Quote
+	barChannel         chan stream.Bar
 	currentSymbol      string
+	calendar           *alpaca.CalendarDay
+	prevCalendar       *alpaca.CalendarDay
 }
 
 // NewApp creates a new App application struct
@@ -63,6 +49,7 @@ func NewApp() *App {
 
 	tradeChannel := make(chan stream.Trade, 10_000)
 	quoteChannel := make(chan stream.Quote, 10_000)
+	barChannel := make(chan stream.Bar, 100)
 	updateTicker := time.NewTicker(100 * time.Millisecond)
 
 	snapshotTicker := time.NewTicker(1 * time.Second)
@@ -71,18 +58,22 @@ func NewApp() *App {
 		db:           db,
 		tradeChannel: tradeChannel,
 		quoteChannel: quoteChannel,
+		barChannel:   barChannel,
 	}
 
 	go func(app *App) {
 		var lastTrade stream.Trade
 		var lastQuote stream.Quote
+		var lastBar stream.Bar
 		for {
 			select {
 			case lastTrade = <-app.tradeChannel:
 			case lastQuote = <-app.quoteChannel:
+			case lastBar = <-app.barChannel:
 			case <-updateTicker.C:
 				app.Emit(lastTrade)
 				app.Emit(lastQuote)
+				app.Emit(lastBar)
 			case t := <-snapshotTicker.C:
 				if t.Second() == 0 && app.marketDataClient != nil && app.currentSymbol != "" {
 					log.Println("Getting snapshot")
@@ -104,24 +95,13 @@ func (a *App) Emit(data any) {
 	switch data.(type) {
 	case stream.Trade:
 		trade := data.(stream.Trade)
-
-		runtime.EventsEmit(a.ctx, "trade", Trade{
-			Symbol:    trade.Symbol,
-			Price:     trade.Price,
-			Size:      float64(trade.Size),
-			Timestamp: trade.Timestamp.UnixMilli(),
-		})
+		runtime.EventsEmit(a.ctx, "trade", trade)
 	case stream.Quote:
 		quote := data.(stream.Quote)
-
-		runtime.EventsEmit(a.ctx, "quote", Quote{
-			Symbol:    quote.Symbol,
-			BidPrice:  quote.BidPrice,
-			BidSize:   float64(quote.BidSize),
-			AskPrice:  quote.AskPrice,
-			AskSize:   float64(quote.AskSize),
-			Timestamp: quote.Timestamp.UnixMilli(),
-		})
+		runtime.EventsEmit(a.ctx, "quote", quote)
+	case stream.Bar:
+		bar := data.(stream.Bar)
+		runtime.EventsEmit(a.ctx, "bar", bar)
 	case *marketdata.Snapshot:
 		snapshot := data.(*marketdata.Snapshot)
 		runtime.EventsEmit(a.ctx, "snapshot", snapshot)
@@ -144,9 +124,25 @@ func (a *App) startup(ctx context.Context) {
 	streamCtx, cancel := context.WithCancel(a.ctx)
 	a.streamCtx = streamCtx
 	a.cancelStream = cancel
-
 	err := a.stocksStreamClient.Connect(a.streamCtx)
 	fatal(err)
+
+	calendars, err := a.alpacaClient.GetCalendar(alpaca.GetCalendarRequest{
+		Start: time.Now().Add(-24 * time.Hour * 7),
+		End:   time.Now().Add(24 * time.Hour * 7),
+	})
+	fatal(err)
+
+	today := time.Now().Format("2006-01-02")
+
+	for _, calendar := range calendars {
+		if calendar.Date == today {
+			a.calendar = &calendar
+			break
+		}
+
+		a.prevCalendar = &calendar
+	}
 
 	a.ready = true
 
@@ -169,9 +165,31 @@ func (a *App) startup(ctx context.Context) {
 	runtime.EventsEmit(a.ctx, "ready")
 }
 
-// Greet returns a greeting for the given name
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
+func (a *App) GetIntradayBars(symbol string) []marketdata.Bar {
+	if symbol == "" {
+		symbol = a.currentSymbol
+	}
+
+	if symbol == "" {
+		return nil
+	}
+
+	bars, err := a.marketDataClient.GetBars(symbol, marketdata.GetBarsRequest{
+		TimeFrame: marketdata.TimeFrame{N: 1, Unit: marketdata.Min},
+		Start:     time.Now().Add(-24 * time.Hour),
+		End:       time.Now(),
+	})
+	fatal(err)
+
+	return bars
+}
+
+func (a *App) GetCalendar() *alpaca.CalendarDay {
+	return a.calendar
+}
+
+func (a *App) GetPrevCalendar() alpaca.CalendarDay {
+	return *a.prevCalendar
 }
 
 func (a *App) GetAsset(symbol string) *alpaca.Asset {
@@ -228,6 +246,9 @@ func (a *App) Subscribe(symbol string) bool {
 
 		err = a.stocksStreamClient.UnsubscribeFromQuotes(a.currentSymbol)
 		fatal(err)
+
+		err = a.stocksStreamClient.UnsubscribeFromBars(a.currentSymbol)
+		fatal(err)
 	}
 
 	err = a.stocksStreamClient.SubscribeToTrades(func(trade stream.Trade) {
@@ -238,6 +259,12 @@ func (a *App) Subscribe(symbol string) bool {
 	err = a.stocksStreamClient.SubscribeToQuotes(func(quote stream.Quote) {
 		a.quoteChannel <- quote
 	}, symbol)
+	fatal(err)
+
+	err = a.stocksStreamClient.SubscribeToBars(func(bar stream.Bar) {
+		a.barChannel <- bar
+	}, symbol)
+	fatal(err)
 
 	a.currentSymbol = symbol
 
