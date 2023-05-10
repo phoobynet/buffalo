@@ -52,3 +52,9 @@ export const priceChangePercentAbs = derived(intradayDiff, $intradayDiff => {
 
   return numeral(Math.abs($intradayDiff.changePercent)).format('0.00%')
 })
+
+export const previousCloseFormatted = derived(prevDailyBar, $prevDailyBar => {
+  if (!$prevDailyBar) return undefined
+
+  return numeral($prevDailyBar.c).format('$0,0.00')
+})

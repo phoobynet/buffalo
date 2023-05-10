@@ -83,8 +83,8 @@ func NewApp() *App {
 			case <-updateTicker.C:
 				app.Emit(lastTrade)
 				app.Emit(lastQuote)
-			case <-snapshotTicker.C:
-				if time.Now().Second() == 0 && app.marketDataClient != nil && app.currentSymbol != "" {
+			case t := <-snapshotTicker.C:
+				if t.Second() == 0 && app.marketDataClient != nil && app.currentSymbol != "" {
 					log.Println("Getting snapshot")
 					snapshot := app.GetSnapshot(app.currentSymbol)
 					app.Emit(snapshot)

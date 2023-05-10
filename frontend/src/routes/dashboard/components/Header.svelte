@@ -6,6 +6,7 @@
     priceChangeAbs,
     priceChangePercentAbs,
     tradePriceFormatted,
+    previousCloseFormatted,
   } from '../dashboardStore'
 
   $: up = $intradayDiff?.sign === 1
@@ -19,6 +20,7 @@
   <div class='price-change' class:up={up} class:down={down}>
     <div class='change'>{sign}{$priceChangeAbs}</div>
     <div class='change-percent'>({$priceChangePercentAbs})</div>
+    <div class='previous-close pl-2'>Prev. close <span class='font-bold'>{$previousCloseFormatted}</span></div>
   </div>
   <div class='asset'>
     <div class='name'>{$assetNameShort}</div>
@@ -31,8 +33,8 @@
     @apply grid gap-1 justify-start;
     grid-template-columns: 8rem 10rem auto;
     grid-template-areas:
-      'symbol price price-change'
-      'asset asset asset';
+      'symbol price price-change previous-close'
+      'asset asset asset asset';
 
     .symbol {
       grid-area: symbol;
@@ -45,6 +47,11 @@
 
     .price-change {
       grid-area: price-change;
+    }
+
+    .previous-close {
+      grid-area: previous-close;
+      @apply text-base-content;
     }
 
     .asset {
@@ -68,7 +75,7 @@
       @apply flex gap-1 items-end mb-0.5;
     }
 
-    .price, .change, .change-percent {
+    .price, .change, .change-percent, .previous-close {
       @apply tabular-nums;
     }
 
