@@ -6,7 +6,7 @@
     priceChangeAbs,
     priceChangePercentAbs,
     tradePriceFormatted,
-    previousCloseFormatted,
+    previousCloseFormatted
   } from '../dashboardStore'
 
   $: up = $intradayDiff?.sign === 1

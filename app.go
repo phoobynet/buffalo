@@ -16,7 +16,6 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"log"
-	"strings"
 	"sync"
 	"time"
 )
@@ -37,8 +36,6 @@ type App struct {
 	quotes                     chan stream.Quote
 	bars                       chan stream.Bar
 	currentSymbol              string
-	calendar                   *alpaca.CalendarDay
-	prevCalendar               *alpaca.CalendarDay
 	calendarRepository         *calendar.Repository
 	appConfigurationRepository *configuration.Repository
 	status                     chan clock.Status
@@ -72,8 +69,12 @@ func NewApp() *App {
 
 	go func(app *App) {
 		var lastTrade stream.Trade
+		var lastTradeEmitted stream.Trade
 		var lastQuote stream.Quote
+		var lastQuoteEmitted stream.Quote
 		var lastBar stream.Bar
+		var lastBarEmitted stream.Bar
+
 		for {
 			select {
 			case lastTrade = <-app.trades:
@@ -82,9 +83,20 @@ func NewApp() *App {
 			case currentStatus := <-app.status:
 				app.Emit(currentStatus)
 			case <-updateTicker.C:
-				app.Emit(lastTrade)
-				app.Emit(lastQuote)
-				app.Emit(lastBar)
+				if lastTradeEmitted.ID != lastTrade.ID {
+					app.Emit(lastTrade)
+					lastTradeEmitted = lastTrade
+				}
+
+				if !lastQuoteEmitted.Timestamp.Equal(lastQuote.Timestamp) {
+					app.Emit(lastQuote)
+					lastQuoteEmitted = lastQuote
+				}
+
+				if !lastBarEmitted.Timestamp.Equal(lastBar.Timestamp) {
+					app.Emit(lastBar)
+					lastBarEmitted = lastBar
+				}
 			case t := <-snapshotTicker.C:
 				if t.Second() == 0 && app.marketDataClient != nil && app.currentSymbol != "" {
 					log.Println("Getting snapshot")
@@ -122,7 +134,49 @@ func (a *App) Emit(data any) {
 		panic(fmt.Sprintf("Unknown type: %T", data))
 	}
 
-	runtime.EventsEmit(a.ctx, eventName, data)
+	if eventName == "trade" {
+		streamTrade := data.(stream.Trade)
+
+		runtime.EventsEmit(a.ctx, eventName, map[string]interface{}{
+			"S": streamTrade.Symbol,
+			"p": streamTrade.Price,
+			"x": streamTrade.Exchange,
+			"s": streamTrade.Size,
+			"c": streamTrade.Conditions,
+			"t": streamTrade.Timestamp,
+			"i": streamTrade.ID,
+			"z": streamTrade.Tape,
+		})
+	} else if eventName == "quote" {
+		streamQuote := data.(stream.Quote)
+
+		runtime.EventsEmit(a.ctx, eventName, map[string]interface{}{
+			"S":  streamQuote.Symbol,
+			"bp": streamQuote.BidPrice,
+			"bs": streamQuote.BidSize,
+			"ap": streamQuote.AskPrice,
+			"as": streamQuote.AskSize,
+			"t":  streamQuote.Timestamp,
+			"c":  streamQuote.Conditions,
+			"z":  streamQuote.Tape,
+		})
+	} else if eventName == "bar" {
+		streamBar := data.(stream.Bar)
+
+		runtime.EventsEmit(a.ctx, eventName, map[string]interface{}{
+			"S":  streamBar.Symbol,
+			"o":  streamBar.Open,
+			"h":  streamBar.High,
+			"l":  streamBar.Low,
+			"c":  streamBar.Close,
+			"v":  streamBar.Volume,
+			"t":  streamBar.Timestamp,
+			"vw": streamBar.VWAP,
+			"n":  streamBar.TradeCount,
+		})
+	} else {
+		runtime.EventsEmit(a.ctx, eventName, data)
+	}
 }
 
 // startup is called when the app starts. The context is saved
@@ -177,6 +231,8 @@ func (a *App) startup(ctx context.Context) {
 		runtime.WindowSetSize(ctx, appConfiguration.Width, appConfiguration.Height)
 		runtime.EventsEmit(a.ctx, "ready")
 	}
+
+	a.ready = true
 }
 
 func (a *App) GetIntradayBars(symbol string) ([]marketdata.Bar, error) {
@@ -191,21 +247,34 @@ func (a *App) GetPrevCalendar() (*calendar.Calendar, error) {
 	return a.calendarRepository.PreviousCalendar()
 }
 
-func (a *App) GetAsset(symbol string) *alpaca.Asset {
-	symbol = strings.TrimSpace(strings.ToUpper(symbol))
+func (a *App) GetAssets() ([][]string, error) {
+	assets, err := a.assetRepository.GetAll()
 
-	if symbol == "" {
-		symbol = a.currentSymbol
+	if err != nil {
+		return nil, err
 	}
 
-	if symbol == "" {
-		return nil
+	rows := make([][]string, len(assets))
+
+	for i, x := range assets {
+		rows[i] = []string{
+			x.Symbol,
+			x.Name,
+			x.Exchange,
+		}
 	}
 
+	return rows, nil
+}
+
+func (a *App) GetAsset(symbol string) (*alpaca.Asset, error) {
 	symbolAsset, err := a.assetRepository.Get(symbol)
-	fatal(err)
 
-	return symbolAsset
+	if err != nil {
+		return nil, err
+	}
+
+	return symbolAsset, nil
 }
 
 func (a *App) GetSnapshot(symbol string) *marketdata.Snapshot {

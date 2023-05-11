@@ -1,52 +1,63 @@
 <script lang='ts'>
-  import { GetAsset, GetSnapshot, IsReady, Subscribe } from '../../../wailsjs/go/main/App'
+  import { IsReady, Subscribe } from '../../../wailsjs/go/main/App'
   import { onMount } from 'svelte'
   import { EventsOn } from '../../../wailsjs/runtime'
-  import type { Trade } from '@/types/Trade'
-  import { asset, quote, snapshot, trade } from './dashboardStore'
-  import type { Quote } from '@/types/Quote'
+  import { asset, quote, snapshot, symbol, trade } from './dashboardStore'
   import Header from './components/Header.svelte'
+  import { alpaca, marketdata } from '../../../wailsjs/go/models'
+  import Search from '@/routes/dashboard/components/Search.svelte'
+  import type { StreamQuote, StreamTrade } from '@/lib/types'
+
+  let isReady = false
+
+  function sleep(t: number = 1_000): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve()
+      }, t)
+    })
+  }
 
   let isSubscribed = false
-  const symbol = 'AAPL'
-
-  EventsOn('ready', async () => {
-    isSubscribed = await Subscribe(symbol)
-  })
+  $symbol = 'AAPL'
 
   EventsOn('trade', (data) => {
-    $trade = data satisfies Trade
+    $trade = data satisfies StreamTrade
   })
 
   EventsOn('quote', (data) => {
-    $quote = data satisfies Quote
+    $quote = data satisfies StreamQuote
   })
 
   EventsOn('snapshot', (data) => {
-    $snapshot = data
+    $snapshot = data satisfies marketdata.Snapshot
   })
 
   EventsOn('asset', (data) => {
-    $asset = data
+    $asset = data satisfies alpaca.Asset
   })
 
   onMount(async () => {
-    const isReady = await IsReady()
+    isReady = await IsReady()
 
-    if (isReady && !isSubscribed) {
-      isSubscribed = await Subscribe(symbol)
-    }
-
-    if ($asset === undefined) {
-      $asset = await GetAsset(symbol)
-    }
-
-    if ($snapshot === undefined) {
-      $snapshot = await GetSnapshot(symbol)
+    if (!isReady) {
+      for (let i = 0; i < 10; i++) {
+        await sleep()
+        isReady = await IsReady()
+        if (isReady) {
+          await Subscribe($symbol)
+          break
+        }
+      }
     }
   })
 </script>
 
-<div class='mx-2 mt-2'>
-  <Header />
+<div>
+  <Search />
+  <div class='mx-2 mt-2'>
+    <Header />
+
+    <pre>{JSON.stringify($snapshot, null, 2)}</pre>
+  </div>
 </div>

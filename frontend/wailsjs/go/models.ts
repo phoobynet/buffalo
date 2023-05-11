@@ -35,6 +35,53 @@ export namespace alpaca {
 
 }
 
+export namespace calendar {
+	
+	export class Calendar {
+	    date: string;
+	    // Go type: time
+	    open: any;
+	    // Go type: time
+	    close: any;
+	    // Go type: time
+	    sessionOpen: any;
+	    // Go type: time
+	    sessionClose: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new Calendar(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.open = this.convertValues(source["open"], null);
+	        this.close = this.convertValues(source["close"], null);
+	        this.sessionOpen = this.convertValues(source["sessionOpen"], null);
+	        this.sessionClose = this.convertValues(source["sessionClose"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace marketdata {
 	
 	export class Bar {

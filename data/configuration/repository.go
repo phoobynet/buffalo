@@ -2,7 +2,6 @@ package configuration
 
 import (
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 type Repository struct {
@@ -53,21 +52,15 @@ func (r *Repository) Get() (*AppConfiguration, error) {
 }
 
 func (r *Repository) UpdateWindow(x, y, width, height int) error {
-	result := r.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "key"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{
-			"x":      x,
-			"y":      y,
-			"width":  width,
-			"height": height,
-		}),
-	}).Create(&AppConfiguration{
+	appConfiguration := AppConfiguration{
 		Key:    key,
 		X:      x,
 		Y:      y,
 		Width:  width,
 		Height: height,
-	})
+	}
+
+	result := r.db.Where("key = ?", key).UpdateColumns(&appConfiguration)
 
 	return result.Error
 }

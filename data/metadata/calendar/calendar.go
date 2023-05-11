@@ -38,7 +38,9 @@ func toTime(date, time string) (*time.Time, error) {
 }
 
 func ToCalendarFromDay(calendarDay alpaca.CalendarDay) (*Calendar, error) {
-	calendar := Calendar{}
+	calendar := Calendar{
+		Date: calendarDay.Date,
+	}
 
 	if openingTime, err := toTime(calendarDay.Date, calendarDay.Open); err == nil {
 		calendar.Open = *openingTime

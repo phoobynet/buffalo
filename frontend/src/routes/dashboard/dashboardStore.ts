@@ -1,28 +1,48 @@
-import type { Trade } from '../../types/Trade'
 import { derived, writable } from 'svelte/store'
 import numeral from 'numeral'
-import type { Quote } from '../../types/Quote'
-import type { Snapshot } from '../../types/Snapshot'
-import { numberDiff } from '../../lib/numberDiff'
+import { numberDiff } from '@/lib/numberDiff'
 import type { alpaca } from '../../../wailsjs/go/models'
+import type { marketdata } from '../../../wailsjs/go/models'
+import type { StreamQuote, StreamTrade } from '@/lib/types'
+import { formatISO } from 'date-fns'
 
-export const trade = writable<Trade>(undefined)
+export const symbol = writable<string>('')
+
+export const trade = writable<StreamTrade>()
 
 export const tradePriceFormatted = derived(trade, $trade => {
   if (!$trade) return undefined
+
   return numeral($trade.p).format('$0,0.00')
 })
 
-export const quote = writable<Quote>(undefined)
+export const quote = writable<StreamQuote>()
 
-export const snapshot = writable<Snapshot>(undefined)
+export const snapshot = writable<marketdata.Snapshot>()
 
-export const asset = writable<alpaca.Asset>(undefined)
+export const latestTrade = derived([trade, snapshot, symbol], ([$trade, $snapshot, $symbol]) => {
+  if (!$trade || !$snapshot || !$symbol) return undefined
+
+  if ($trade) {
+    return $trade
+  }
+
+  return {
+    S: $symbol,
+    ...$snapshot.latestTrade,
+  }
+})
+
+export const asset = writable<alpaca.Asset>()
 
 const prevDailyBar = derived(snapshot, $snapshot => {
   if (!$snapshot) return undefined
 
-  if ($snapshot.prevDailyBar?.t.substring(0, 10) === $snapshot.dailyBar.t.substring(0, 10)) {
+  const date = formatISO(Date.now(), {
+    representation: 'date',
+  })
+
+  if ($snapshot.dailyBar.t.substring(0, 10) !== date) {
     return $snapshot.dailyBar
   }
 

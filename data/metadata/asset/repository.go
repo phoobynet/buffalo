@@ -53,11 +53,13 @@ func NewRepository(db *gorm.DB, alpacaClient *alpaca.Client) (*Repository, error
 }
 
 func (r *Repository) Get(symbol string) (*alpaca.Asset, error) {
+	symbol = strings.TrimSpace(strings.ToUpper(symbol))
+
 	var asset alpaca.Asset
 
 	result := r.db.
 		Model(&alpaca.Asset{}).
-		Where("symbol = ?", strings.TrimSpace(strings.ToUpper(symbol))).
+		Where("symbol = ?", symbol).
 		First(&asset)
 
 	if result.Error != nil {
@@ -65,4 +67,15 @@ func (r *Repository) Get(symbol string) (*alpaca.Asset, error) {
 	}
 
 	return &asset, nil
+}
+
+func (r *Repository) GetAll() ([]alpaca.Asset, error) {
+	var assets []alpaca.Asset
+	result := r.db.Find(&assets)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return assets, nil
 }

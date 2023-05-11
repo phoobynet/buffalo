@@ -10,12 +10,24 @@ export function GetAsset(arg1) {
   return window['go']['main']['App']['GetAsset'](arg1);
 }
 
-export function GetSnapshot(arg1) {
-  return window['go']['main']['App']['GetSnapshot'](arg1);
+export function GetAssets() {
+  return window['go']['main']['App']['GetAssets']();
 }
 
-export function Greet(arg1) {
-  return window['go']['main']['App']['Greet'](arg1);
+export function GetCurrentCalendar() {
+  return window['go']['main']['App']['GetCurrentCalendar']();
+}
+
+export function GetIntradayBars(arg1) {
+  return window['go']['main']['App']['GetIntradayBars'](arg1);
+}
+
+export function GetPrevCalendar() {
+  return window['go']['main']['App']['GetPrevCalendar']();
+}
+
+export function GetSnapshot(arg1) {
+  return window['go']['main']['App']['GetSnapshot'](arg1);
 }
 
 export function IsReady() {
@@ -24,4 +36,8 @@ export function IsReady() {
 
 export function Subscribe(arg1) {
   return window['go']['main']['App']['Subscribe'](arg1);
+}
+
+export function Unsubscribe(arg1) {
+  return window['go']['main']['App']['Unsubscribe'](arg1);
 }
