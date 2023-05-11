@@ -1,4 +1,4 @@
-module changeme
+module github.com/phoobynet/buffalo
 
 go 1.18
 

@@ -2,9 +2,9 @@
   import { GetAsset, GetSnapshot, IsReady, Subscribe } from '../../../wailsjs/go/main/App'
   import { onMount } from 'svelte'
   import { EventsOn } from '../../../wailsjs/runtime'
-  import type { Trade } from '../../types/Trade'
+  import type { Trade } from '@/types/Trade'
   import { asset, quote, snapshot, trade } from './dashboardStore'
-  import type { Quote } from '../../types/Quote'
+  import type { Quote } from '@/types/Quote'
   import Header from './components/Header.svelte'
 
   let isSubscribed = false
